@@ -1,22 +1,67 @@
-import express from "express";
+import express, { type Express } from "express";
 import cors from "cors";
-import routes from "./routes/index.js";
+import pinoHttp from "pino-http";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+import router from "./routes/index.js";
+import { logger } from "./lib/logger.js";
 
-const app = express();
+const app: Express = express();
+const createPinoHttp = pinoHttp as unknown as (options: any) => express.RequestHandler;
 
+app.use(
+  createPinoHttp({
+    logger,
+    serializers: {
+      req(req: any) {
+        return {
+          id: req.id,
+          method: req.method,
+          url: req.url?.split("?")[0],
+        };
+      },
+      res(res: any) {
+        return {
+          statusCode: res.statusCode,
+        };
+      },
+    },
+  }),
+);
 app.disable("x-powered-by");
 app.use(cors());
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-app.use("/api", routes);
+app.use("/api", router);
+
+if (process.env.NODE_ENV === "production") {
+  const __dirname = path.dirname(fileURLToPath(import.meta.url));
+  const frontendDist = path.join(__dirname, "../../webapp-frontend/dist");
+
+  if (fs.existsSync(frontendDist)) {
+    app.use(express.static(frontendDist));
+    app.get("*", (_req, res) => {
+      res.sendFile(path.join(frontendDist, "index.html"));
+    });
+    } else {
+      logger.warn(
+        { frontendDist },
+        "Frontend dist not found - skipping static serving",
+      );
+    }
+  }
 
 app.use((_req, res) => {
   res.status(404).json({ ok: false, error: "Not found" });
 });
 
-app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-  console.error(err);
-  res.status(500).json({ ok: false, error: "Internal server error" });
-});
+app.use(
+  (err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    console.error(err);
+    res.status(500).json({ ok: false, error: "Internal server error" });
+  },
+);
 
 export default app;
