@@ -31,6 +31,7 @@ app.use(
 );
 app.disable("x-powered-by");
 app.use(cors());
+app.use(express.text({ type: ["text/csv", "text/plain"], limit: "5mb" }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
