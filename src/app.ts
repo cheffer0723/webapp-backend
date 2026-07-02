@@ -6,6 +6,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import router from "./routes/index.js";
 import { logger } from "./lib/logger.js";
+import { createX402Middleware, MACHINE_ROUTE_PATH } from "./lib/x402.js";
 
 const app: Express = express();
 const createPinoHttp = pinoHttp as unknown as (options: any) => express.RequestHandler;
@@ -34,6 +35,16 @@ app.use(cors());
 app.use(express.text({ type: ["text/csv", "text/plain"], limit: "5mb" }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Agentic access (x402): gates only MACHINE_ROUTE_PATH when X402_ENABLED=true.
+// Off/unconfigured => middleware is null and the route stays free. Human endpoints are never gated.
+const x402Middleware = createX402Middleware();
+if (x402Middleware) {
+  app.use(x402Middleware);
+  logger.info({ route: MACHINE_ROUTE_PATH }, "x402 agentic access ENABLED");
+} else {
+  logger.info("x402 agentic access disabled (X402_ENABLED!=true or unconfigured)");
+}
 
 app.use("/api", router);
 
